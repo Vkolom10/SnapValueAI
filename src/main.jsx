@@ -150,20 +150,21 @@ function Dashboard({items,total,top,openList,openDetails}){
       </div>
     </section>
     {hasItems && <>
-      <section className="panel sell-panel">
-        <div className="panel-head"><h2>Where to sell</h2><button>View tips <ChevronRight size={14}/></button></div>
-        <div className="sell-grid">
+      <section className="panel sell-mini">
+        <h2>Where to sell</h2>
+        <div className="sell-scroll">
           {['eBay','Facebook','Craigslist','Mercari'].map(p=>
-            <div className="sell-card" key={p}>
-              <div className="sell-mark" style={{background:platformColors[p]}}>{platformMark(p)}</div>
-              <span>{p}</span>
+            <div className="sell-chip" key={p}>
+              <span className="sell-mark-sm" style={{background:platformColors[p]}}>{platformMark(p)}</span>{p}
             </div>
           )}
         </div>
-        <p className="muted small">Compare prices across top platforms to sell faster.</p>
       </section>
       <section className="panel">
-        <div className="panel-head"><h2>Top items</h2><span className="sub">Highest profit potential</span><button onClick={openList}>See all</button></div>
+        <div className="panel-head-col">
+          <div className="panel-head-row"><h2>Top items</h2><button onClick={openList}>See all</button></div>
+          <span className="sub">Highest profit potential</span>
+        </div>
         {top.map(item=><ItemCard key={item.id} item={item} onClick={()=>openDetails(item)}/>) }
         {!top.length && <p className="muted">AI is still working. Estimated items will show here.</p>}
       </section>
@@ -172,22 +173,11 @@ function Dashboard({items,total,top,openList,openDetails}){
 }
 
 function ItemCard({item,onClick}){
-  const highProfit = (item.profit||0) >= 15;
-  return <button className="top-card" onClick={onClick}>
+  return <button className="top-card slim" onClick={onClick}>
     <Thumb item={item}/>
-    <div className="grow">
-      <b>{item.name}</b>
-      <small className="cat-line">{item.category||'Item'} · {item.condition}</small>
-      <div className="tag-row">
-        {highProfit && <span className="badge-high">High profit</span>}
-        {item.platform && <span className="plat-badge" style={{background:platformColors[item.platform]||'#888'}}>{platformMark(item.platform)}</span>}
-      </div>
-    </div>
-    <div className="price-col">
-      <strong>{money(item.low)}</strong>
-      <small>Low est.</small>
-    </div>
-    <ChevronRight size={16}/>
+    <span className="ic-name">{item.name}</span>
+    {item.platform && <span className="plat-badge" style={{background:platformColors[item.platform]||'#888'}}>{platformMark(item.platform)}</span>}
+    <strong className="ic-price">{money(item.low)}</strong>
   </button>
 }
 function FullList({items,setSelected,setEditing}){
