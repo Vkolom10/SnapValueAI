@@ -21,6 +21,7 @@ Respond with ONLY a JSON object, no markdown fences, no extra text, in exactly t
   "name": "short item name, e.g. 'KitchenAid Artisan Stand Mixer'",
   "category": "one short category word, e.g. 'Kitchen', 'Electronics', 'Tools', 'Fashion', 'Home Decor'",
   "condition": "one of: Poor, Fair, OK, Good, Excellent",
+  "referencePrices": [ { "platform": "eBay", "price": 120 }, { "platform": "Facebook", "price": 95 } ],
   "low": <integer, conservative low price in USD>,
   "good": <integer, realistic price in USD>,
   "best": <integer, optimistic best-case price in USD>,
@@ -28,6 +29,8 @@ Respond with ONLY a JSON object, no markdown fences, no extra text, in exactly t
   "confidence": <integer 0-100, how confident you are in the identification>,
   "notes": "one short sentence on condition/flaws visible, or what would raise the price"
 }
+
+For referencePrices: give up to 3 entries, each a different platform (eBay, Facebook, Craigslist, or Mercari), sorted highest price first. These are your own estimates for what it would likely go for on that platform — not verified sold listings.
 
 If you genuinely cannot identify the item well enough to price it (too blurry, too generic, no clear item), instead respond with:
 { "needsInfo": true, "notes": "short reason, e.g. 'Photo too blurry to identify' or 'Need a closer shot of the label/model number'" }`;

@@ -4,10 +4,10 @@ import { Camera, List, Home, Search, X, Plus, Trash2, Copy, ImagePlus, ChevronRi
 import './styles.css';
 
 const seedItems = [
-  { id:'1', name:'KitchenAid Mixer', category:'Kitchen', status:'estimated', low:210, good:245, best:285, platform:'eBay', condition:'Good', confidence:92, ship:18, profit:75, photo:'', notes:'Works, small scratches on bowl.', sold:[215,228,240] },
-  { id:'2', name:'Nintendo Switch', category:'Electronics', status:'estimated', low:145, good:175, best:210, platform:'Facebook', condition:'OK', confidence:88, ship:12, profit:65, photo:'', notes:'Console only, charger included.', sold:[150,168,185] },
-  { id:'3', name:'DeWalt Drill', category:'Tools', status:'working', low:0, good:0, best:0, platform:'eBay', condition:'Unknown', confidence:0, ship:0, profit:0, photo:'', notes:'', sold:[] },
-  { id:'4', name:'Unknown Item', category:'', status:'needs', low:0, good:0, best:0, platform:'', condition:'Unknown', confidence:0, ship:0, profit:0, photo:'', notes:'Needs label photo or more details.', sold:[] }
+  { id:'1', name:'KitchenAid Mixer', category:'Kitchen', status:'estimated', low:210, good:245, best:285, platform:'eBay', condition:'Good', confidence:92, ship:18, profit:75, photo:'', notes:'Works, small scratches on bowl.', sold:[], refPrices:[{platform:'eBay',price:245},{platform:'Facebook',price:225},{platform:'Mercari',price:210}] },
+  { id:'2', name:'Nintendo Switch', category:'Electronics', status:'estimated', low:145, good:175, best:210, platform:'Facebook', condition:'OK', confidence:88, ship:12, profit:65, photo:'', notes:'Console only, charger included.', sold:[], refPrices:[{platform:'Facebook',price:175},{platform:'eBay',price:165},{platform:'Mercari',price:145}] },
+  { id:'3', name:'DeWalt Drill', category:'Tools', status:'working', low:0, good:0, best:0, platform:'eBay', condition:'Unknown', confidence:0, ship:0, profit:0, photo:'', notes:'', sold:[], refPrices:[] },
+  { id:'4', name:'Unknown Item', category:'', status:'needs', low:0, good:0, best:0, platform:'', condition:'Unknown', confidence:0, ship:0, profit:0, photo:'', notes:'Needs label photo or more details.', sold:[], refPrices:[] }
 ];
 
 function loadItems(){
@@ -83,6 +83,7 @@ function App(){
           platform:data.platform || 'Facebook',
           condition:data.condition || 'Good',
           confidence:Number(data.confidence)||0,
+          refPrices:Array.isArray(data.referencePrices)?data.referencePrices.slice(0,3):[],
           ship:8+Math.floor(low*.06), // rough shipping placeholder, no real carrier rate lookup yet
           profit:Math.floor(low*.35),
           notes:data.notes || '',
@@ -161,10 +162,7 @@ function Dashboard({items,total,top,openList,openDetails}){
         </div>
       </section>
       <section className="panel">
-        <div className="panel-head-col">
-          <div className="panel-head-row"><h2>Top items</h2><button onClick={openList}>See all</button></div>
-          <span className="sub">Highest profit potential</span>
-        </div>
+        <div className="panel-head"><h2>Top items</h2><button onClick={openList}>See all</button></div>
         {top.map(item=><ItemCard key={item.id} item={item} onClick={()=>openDetails(item)}/>) }
         {!top.length && <p className="muted">AI is still working. Estimated items will show here.</p>}
       </section>
@@ -225,8 +223,39 @@ function BottomNav({page,setPage,openCamera,openUpload}){
   </nav>
 }
 function Details({item,close,edit,deleteItem}){
+  const [copied,setCopied] = useState(false);
   const listing = `${item.name}\nCondition: ${item.condition}\nPrice: ${money(item.low)}\nPlatform: ${item.platform || 'Local'}\n${item.notes||''}`;
-  return <div className="sheet-back"><div className="sheet"><button className="x" onClick={close}><X/></button><Thumb item={item}/><h2>{item.name}</h2><Status item={item}/>{item.status==='needs' && <p className="alert">AI needs more info. Double tap item or press Edit to add notes/photos.</p>}<div className="price-grid"><Box label="Low" value={money(item.low)}/><Box label="Good" value={money(item.good)}/><Box label="Best" value={money(item.best)}/></div><div className="info"><p><b>Best platform:</b> {item.platform||'Unknown'}</p><p><b>Condition:</b> {item.condition}</p><p><b>Confidence:</b> {item.confidence||0}%</p><p><b>Shipping:</b> {item.ship?money(item.ship):'Needs weight'}</p><p><b>Sold comps:</b> {item.sold?.length?item.sold.map(money).join(' · '):'Still searching'}</p></div><div className="actions"><button onClick={()=>navigator.clipboard?.writeText(listing)}><Copy size={17}/> Copy Listing</button><button onClick={edit}><Pencil size={17}/> Edit</button><button className="danger" onClick={()=>deleteItem(item.id)}><Trash2 size={17}/> Delete</button></div></div></div>
+  function doCopy(){ navigator.clipboard?.writeText(listing); setCopied(true); setTimeout(()=>setCopied(false),5000); }
+  function confirmDelete(){ if(confirm(`Delete "${item.name}"? This can't be undone.`)) deleteItem(item.id); }
+  return <div className="sheet-back"><div className="sheet">
+    <button className="x" onClick={close}><X/></button>
+    <Thumb item={item}/>
+    <h2>{item.name}</h2>
+    <Status item={item}/>
+    {item.status==='needs' && <p className="alert">AI needs more info. Double tap item or press Edit to add notes/photos.</p>}
+    <div className="price-grid"><Box label="Low" value={money(item.low)}/><Box label="Good" value={money(item.good)}/><Box label="Best" value={money(item.best)}/></div>
+    {item.notes && <div className="notes-block"><small>Notes</small><p>{item.notes}</p></div>}
+    <div className="info">
+      <p><b>Condition:</b> {item.condition}</p>
+      <p><b>Confidence:</b> {item.confidence||0}%</p>
+      <p><b>Shipping:</b> {item.ship?money(item.ship):'Needs weight'}</p>
+    </div>
+    {!!(item.refPrices && item.refPrices.length) && <div className="ref-prices">
+      <small className="ref-label">Reference prices</small>
+      {item.refPrices.slice(0,3).map((r,idx)=>
+        <div className="ref-row" key={idx}>
+          <span className="plat-badge" style={{background:platformColors[r.platform]||'#888'}}>{platformMark(r.platform)}</span>
+          <span className="ref-at">@ {r.platform}</span>
+          <strong>{money(r.price)}</strong>
+        </div>
+      )}
+    </div>}
+    <div className="actions">
+      <button className={copied?'copied-flash':''} onClick={doCopy}><Copy size={17}/> {copied?'Copied!':'Copy Listing'}</button>
+      <button onClick={edit}><Pencil size={17}/> Edit</button>
+      <button className="danger" onClick={confirmDelete}><Trash2 size={17}/> Delete</button>
+    </div>
+  </div></div>
 }
 function StatsPage({items}){
   const estimated = items.filter(i=>i.status==='estimated');
@@ -291,7 +320,8 @@ function EditSheet({item,close,save,deleteItem}){
   const [draft,setDraft]=useState(item);
   const file=useRef(null);
   function addPhoto(e){ const f=e.target.files?.[0]; if(!f)return; const r=new FileReader(); r.onload=()=>setDraft({...draft,photo:r.result,status:'working'}); r.readAsDataURL(f); }
-  return <div className="sheet-back"><div className="sheet edit"><button className="x" onClick={close}><X/></button><h2>Edit Item</h2><Thumb item={draft}/><input ref={file} hidden type="file" accept="image/*" capture="environment" onChange={addPhoto}/><button className="add-photo" onClick={()=>file.current.click()}><ImagePlus/> Add better photo</button><label>Name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label><label>Condition<select value={draft.condition} onChange={e=>setDraft({...draft,condition:e.target.value})}><option>Unknown</option><option>Fair</option><option>OK</option><option>Good</option><option>Excellent</option></select></label><label>Notes<textarea value={draft.notes} onChange={e=>setDraft({...draft,notes:e.target.value,status:'working'})} placeholder="Example: works, missing charger, scratched, label says model 123..."/></label><div className="actions"><button onClick={()=>save(draft)}>Save</button><button className="danger" onClick={()=>deleteItem(item.id)}>Delete</button></div></div></div>
+  function confirmDelete(){ if(confirm(`Delete "${item.name}"? This can't be undone.`)) deleteItem(item.id); }
+  return <div className="sheet-back"><div className="sheet edit"><button className="x" onClick={close}><X/></button><h2>Edit Item</h2><Thumb item={draft}/><input ref={file} hidden type="file" accept="image/*" capture="environment" onChange={addPhoto}/><button className="add-photo" onClick={()=>file.current.click()}><ImagePlus/> Add better photo</button><label>Name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label><label>Condition<select value={draft.condition} onChange={e=>setDraft({...draft,condition:e.target.value})}><option>Unknown</option><option>Fair</option><option>OK</option><option>Good</option><option>Excellent</option></select></label><label>Notes<textarea value={draft.notes} onChange={e=>setDraft({...draft,notes:e.target.value,status:'working'})} placeholder="Example: works, missing charger, scratched, label says model 123..."/></label><div className="actions"><button onClick={()=>save(draft)}>Save</button><button className="danger" onClick={confirmDelete}>Delete</button></div></div></div>
 }
 
 createRoot(document.getElementById('root')).render(<App/>);
