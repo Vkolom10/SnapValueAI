@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Camera, List, Home, Search, X, Plus, Trash2, Copy, ImagePlus, ChevronRight, Pencil, Sparkles, MoreHorizontal, Tag, TrendingUp } from 'lucide-react';
+import { Camera, List, Home, Search, X, Plus, Trash2, Copy, ImagePlus, ChevronRight, Pencil, Sparkles, MoreHorizontal, Tag, TrendingUp, BarChart3, Settings } from 'lucide-react';
 import './styles.css';
 
 const seedItems = [
@@ -25,6 +25,7 @@ function App(){
   const [selected,setSelected] = useState(null);
   const [editing,setEditing] = useState(null);
   const fileRef = useRef(null);
+  const uploadRef = useRef(null);
 
   const setItems = next => { setItemsState(next); saveItems(next); };
   const conservativeTotal = useMemo(()=>items.reduce((s,i)=>s+(i.status==='estimated'?Number(i.low||0):0),0),[items]);
@@ -98,16 +99,25 @@ function App(){
   }
 
   function openCamera(){ fileRef.current?.click(); }
+  function openUpload(){ uploadRef.current?.click(); }
+  function clearAllData(){
+    if(confirm('Delete all scanned items? This cannot be undone.')){
+      setItems([]);
+    }
+  }
   function updateItem(updated){ setItems(items.map(i=>i.id===updated.id?updated:i)); setEditing(null); }
   function deleteItem(id){ setItems(items.filter(i=>i.id!==id)); setSelected(null); setEditing(null); }
 
   return <div className="phone-shell">
     <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={handlePhoto}/>
+    <input ref={uploadRef} type="file" accept="image/*" hidden onChange={handlePhoto}/>
     <main className="app">
       {page==='dashboard' && <Dashboard items={items} total={conservativeTotal} top={top} openList={()=>setPage('list')} openDetails={setSelected}/>}      
       {page==='list' && <FullList items={items} setSelected={setSelected} setEditing={setEditing}/>}      
+      {page==='stats' && <StatsPage items={items}/>}
+      {page==='settings' && <SettingsPage clearAllData={clearAllData} itemCount={items.length}/>}
     </main>
-    <BottomNav page={page} setPage={setPage} openCamera={openCamera}/>
+    <BottomNav page={page} setPage={setPage} openCamera={openCamera} openUpload={openUpload}/>
     {selected && <Details item={selected} close={()=>setSelected(null)} edit={()=>{setEditing(selected); setSelected(null)}} deleteItem={deleteItem}/>}    
     {editing && <EditSheet item={editing} close={()=>setEditing(null)} save={updateItem} deleteItem={deleteItem}/>}    
   </div>
@@ -206,18 +216,20 @@ function Status({item}){
   return <small className="need">Needs More Info</small>;
 }
 function Thumb({item}){ return <div className="thumb">{item.photo ? <img src={item.photo}/> : <span>{item.name?.[0]||'?'}</span>}</div> }
-function BottomNav({page,setPage,openCamera}){
+function BottomNav({page,setPage,openCamera,openUpload}){
   const [open,setOpen] = useState(false);
-  const notBuilt = (label) => { setOpen(false); alert(`${label} isn't built yet — placeholder for now.`); };
+  const go = (p) => { setOpen(false); setPage(p); };
   return <nav className="bottom-nav slim">
-    <button className={page==='dashboard'?'active':''} onClick={()=>{setOpen(false); setPage('dashboard');}}><Home size={20}/><span>Home</span></button>
+    <button className={page==='dashboard'?'active':''} onClick={()=>go('dashboard')}><Home size={20}/><span>Home</span></button>
     <button className="scan" onClick={()=>{setOpen(false); openCamera();}}><Camera size={26}/></button>
     <div className="more-wrap">
       <button className={open?'active':''} onClick={()=>setOpen(!open)}><MoreHorizontal size={20}/><span>More</span></button>
       {open && <div className="more-menu">
-        <button onClick={()=>{setOpen(false); setPage('list');}}><List size={16}/> My Items</button>
-        <button onClick={()=>notBuilt('Stats')}><Sparkles size={16}/> Stats</button>
-        <button onClick={()=>notBuilt('Settings')}><Pencil size={16}/> Settings</button>
+        <button onClick={()=>go('list')}><List size={16}/> My Items</button>
+        <button onClick={()=>go('stats')}><BarChart3 size={16}/> Stats</button>
+        <button onClick={()=>go('settings')}><Settings size={16}/> Settings</button>
+        <div className="menu-divider"></div>
+        <button onClick={()=>{setOpen(false); openUpload();}}><ImagePlus size={16}/> Upload from files</button>
       </div>}
     </div>
   </nav>
@@ -225,6 +237,64 @@ function BottomNav({page,setPage,openCamera}){
 function Details({item,close,edit,deleteItem}){
   const listing = `${item.name}\nCondition: ${item.condition}\nPrice: ${money(item.low)}\nPlatform: ${item.platform || 'Local'}\n${item.notes||''}`;
   return <div className="sheet-back"><div className="sheet"><button className="x" onClick={close}><X/></button><Thumb item={item}/><h2>{item.name}</h2><Status item={item}/>{item.status==='needs' && <p className="alert">AI needs more info. Double tap item or press Edit to add notes/photos.</p>}<div className="price-grid"><Box label="Low" value={money(item.low)}/><Box label="Good" value={money(item.good)}/><Box label="Best" value={money(item.best)}/></div><div className="info"><p><b>Best platform:</b> {item.platform||'Unknown'}</p><p><b>Condition:</b> {item.condition}</p><p><b>Confidence:</b> {item.confidence||0}%</p><p><b>Shipping:</b> {item.ship?money(item.ship):'Needs weight'}</p><p><b>Sold comps:</b> {item.sold?.length?item.sold.map(money).join(' · '):'Still searching'}</p></div><div className="actions"><button onClick={()=>navigator.clipboard?.writeText(listing)}><Copy size={17}/> Copy Listing</button><button onClick={edit}><Pencil size={17}/> Edit</button><button className="danger" onClick={()=>deleteItem(item.id)}><Trash2 size={17}/> Delete</button></div></div></div>
+}
+function StatsPage({items}){
+  const estimated = items.filter(i=>i.status==='estimated');
+  const total = estimated.reduce((s,i)=>s+i.low,0);
+  const avgConfidence = estimated.length ? Math.round(estimated.reduce((s,i)=>s+(i.confidence||0),0)/estimated.length) : 0;
+  const byCategory = {};
+  estimated.forEach(i=>{ const c=i.category||'Other'; byCategory[c]=(byCategory[c]||0)+i.low; });
+  const catRows = Object.entries(byCategory).sort((a,b)=>b[1]-a[1]);
+  const byPlatform = {};
+  estimated.forEach(i=>{ if(i.platform) byPlatform[i.platform]=(byPlatform[i.platform]||0)+1; });
+  const platRows = Object.entries(byPlatform).sort((a,b)=>b[1]-a[1]);
+
+  return <div className="screen list-screen">
+    <header className="plain-head"><h1>Stats</h1><p>Based on your {estimated.length} estimated item{estimated.length===1?'':'s'}.</p></header>
+    {!estimated.length ? <p className="muted" style={{margin:'0 16px'}}>Scan and estimate a few items to see stats here.</p> : <>
+      <div className="stats-grid">
+        <div className="mini"><small>Total value</small><b>{money(total)}</b></div>
+        <div className="mini"><small>Items</small><b>{estimated.length}</b></div>
+        <div className="mini"><small>Avg confidence</small><b>{avgConfidence}%</b></div>
+      </div>
+      <section className="panel">
+        <div className="panel-head"><h2>By category</h2></div>
+        {catRows.map(([cat,val])=>
+          <div className="stat-bar-row" key={cat}>
+            <span>{cat}</span>
+            <div className="stat-bar-track"><div className="stat-bar-fill" style={{width:`${Math.max(6,(val/total)*100)}%`}}></div></div>
+            <strong>{money(val)}</strong>
+          </div>
+        )}
+      </section>
+      <section className="panel">
+        <div className="panel-head"><h2>By platform</h2></div>
+        <div className="sell-grid">
+          {platRows.map(([p,count])=>
+            <div className="sell-card" key={p}>
+              <div className="sell-mark" style={{background:platformColors[p]||'#888'}}>{platformMark(p)}</div>
+              <span>{p} · {count}</span>
+            </div>
+          )}
+        </div>
+      </section>
+    </>}
+  </div>
+}
+
+function SettingsPage({clearAllData,itemCount}){
+  return <div className="screen list-screen">
+    <header className="plain-head"><h1>Settings</h1><p>Local, on this device only.</p></header>
+    <section className="panel">
+      <div className="panel-head"><h2>Data</h2></div>
+      <p className="muted" style={{margin:'0 0 12px'}}>{itemCount} item{itemCount===1?'':'s'} saved in this browser's local storage. Not synced or backed up anywhere else.</p>
+      <button className="danger-block" onClick={clearAllData}><Trash2 size={16}/> Clear all data</button>
+    </section>
+    <section className="panel">
+      <div className="panel-head"><h2>About</h2></div>
+      <p className="muted" style={{margin:0}}>SnapValue AI — personal resale scanner. More settings will show up here once there's something real to configure.</p>
+    </section>
+  </div>
 }
 function Box({label,value}){return <div className="mini"><small>{label}</small><b>{value}</b></div>}
 function EditSheet({item,close,save,deleteItem}){
