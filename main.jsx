@@ -1,13 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Camera, List, Home, Search, X, Plus, Trash2, Copy, ImagePlus, ChevronRight, Pencil, Sparkles } from 'lucide-react';
+import { Camera, List, Home, Search, X, Plus, Trash2, Copy, ImagePlus, ChevronRight, Pencil, Sparkles, MoreHorizontal, Tag, TrendingUp } from 'lucide-react';
 import './styles.css';
 
 const seedItems = [
-  { id:'1', name:'KitchenAid Mixer', status:'estimated', low:210, good:245, best:285, platform:'eBay', condition:'Good', confidence:92, ship:18, profit:75, photo:'', notes:'Works, small scratches on bowl.', sold:[215,228,240] },
-  { id:'2', name:'Nintendo Switch', status:'estimated', low:145, good:175, best:210, platform:'Facebook', condition:'OK', confidence:88, ship:12, profit:65, photo:'', notes:'Console only, charger included.', sold:[150,168,185] },
-  { id:'3', name:'DeWalt Drill', status:'working', low:0, good:0, best:0, platform:'eBay', condition:'Unknown', confidence:0, ship:0, profit:0, photo:'', notes:'', sold:[] },
-  { id:'4', name:'Unknown Item', status:'needs', low:0, good:0, best:0, platform:'', condition:'Unknown', confidence:0, ship:0, profit:0, photo:'', notes:'Needs label photo or more details.', sold:[] }
+  { id:'1', name:'KitchenAid Mixer', category:'Kitchen', status:'estimated', low:210, good:245, best:285, platform:'eBay', condition:'Good', confidence:92, ship:18, profit:75, photo:'', notes:'Works, small scratches on bowl.', sold:[215,228,240] },
+  { id:'2', name:'Nintendo Switch', category:'Electronics', status:'estimated', low:145, good:175, best:210, platform:'Facebook', condition:'OK', confidence:88, ship:12, profit:65, photo:'', notes:'Console only, charger included.', sold:[150,168,185] },
+  { id:'3', name:'DeWalt Drill', category:'Tools', status:'working', low:0, good:0, best:0, platform:'eBay', condition:'Unknown', confidence:0, ship:0, profit:0, photo:'', notes:'', sold:[] },
+  { id:'4', name:'Unknown Item', category:'', status:'needs', low:0, good:0, best:0, platform:'', condition:'Unknown', confidence:0, ship:0, profit:0, photo:'', notes:'Needs label photo or more details.', sold:[] }
 ];
 
 function loadItems(){
@@ -16,6 +16,8 @@ function loadItems(){
 function saveItems(items){ localStorage.setItem('snapvalue-items', JSON.stringify(items)); }
 const money = n => `$${Number(n||0).toLocaleString()}`;
 const platformShort = p => ({ eBay:'eB', Facebook:'FB', Craigslist:'CL', Mercari:'ME', Garage:'GS' }[p] || 'AI');
+const platformColors = { eBay:'#e53238', Facebook:'#1877f2', Craigslist:'#6b3fa0', Mercari:'#ff4b0a' };
+const platformMark = p => (p||'?')[0];
 
 function App(){
   const [items,setItemsState] = useState(loadItems());
@@ -29,40 +31,68 @@ function App(){
   const estimated = items.filter(i=>i.status==='estimated');
   const top = [...estimated].sort((a,b)=>(b.profit||b.low)-(a.profit||a.low)).slice(0,5);
 
-  function handlePhoto(e){
+  async function handlePhoto(e){
     const file = e.target.files?.[0];
     if(!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const id = String(Date.now());
+      const dataUrl = reader.result; // e.g. "data:image/jpeg;base64,AAAA..."
+      const [meta, base64] = dataUrl.split(',');
+      const mediaType = meta.match(/data:(.*);base64/)?.[1] || 'image/jpeg';
+
       const newItem = {
         id, name:'AI scanning...', status:'working', low:0, good:0, best:0, platform:'', condition:'Unknown', confidence:0, ship:0, profit:0,
-        photo:reader.result, notes:'', sold:[]
+        photo:dataUrl, notes:'', sold:[]
       };
       const next = [newItem, ...items];
       setItems(next);
       setPage('list');
-      setTimeout(()=>{
-        const names = ['Garage Tool','Small Appliance','Home Decor Item','Electronics Item','Kitchen Item'];
-        const platforms = ['Facebook','eBay','Craigslist','Mercari'];
-        const low = 25 + Math.floor(Math.random()*150);
+      e.target.value='';
+
+      try{
+        const res = await fetch('/api/estimate', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ imageBase64: base64, mediaType })
+        });
+        const data = await res.json();
+
+        if(!res.ok || data.error){
+          const failed = loadItems().map(i=> i.id===id ? { ...i, status:'needs', name:'Scan failed', notes:data.error||'AI request failed. Edit to retry or add details.' } : i);
+          setItems(failed);
+          return;
+        }
+
+        if(data.needsInfo){
+          const needsInfo = loadItems().map(i=> i.id===id ? { ...i, status:'needs', name:i.name==='AI scanning...' ? 'Unidentified Item' : i.name, notes:data.notes||'AI needs a clearer photo.' } : i);
+          setItems(needsInfo);
+          return;
+        }
+
+        const low = Number(data.low)||0;
         const updated = loadItems().map(i=> i.id===id ? {
           ...i,
-          name:names[Math.floor(Math.random()*names.length)],
+          name:data.name || 'Unidentified Item',
+          category:data.category || 'Item',
           status:'estimated',
           low,
-          good:low+Math.floor(low*.22),
-          best:low+Math.floor(low*.45),
-          platform:platforms[Math.floor(Math.random()*platforms.length)],
-          condition:'Good',
-          confidence:74+Math.floor(Math.random()*20),
-          ship:8+Math.floor(Math.random()*22),
+          good:Number(data.good)||low,
+          best:Number(data.best)||low,
+          platform:data.platform || 'Facebook',
+          condition:data.condition || 'Good',
+          confidence:Number(data.confidence)||0,
+          ship:8+Math.floor(low*.06), // rough shipping placeholder, no real carrier rate lookup yet
           profit:Math.floor(low*.35),
-          sold:[low+3, low+12, low+21]
+          notes:data.notes || '',
+          sold:[]
         } : i);
         setItems(updated);
-      }, 2200);
-      e.target.value='';
+      } catch(err){
+        console.error('Estimate error:', err);
+        const failed = loadItems().map(i=> i.id===id ? { ...i, status:'needs', name:'Scan failed', notes:'Network error reaching AI. Edit to retry.' } : i);
+        setItems(failed);
+      }
     };
     reader.readAsDataURL(file);
   }
@@ -85,25 +115,45 @@ function App(){
 
 function Dashboard({items,total,top,openList,openDetails}){
   const hasItems = items.length>0;
+  const topItem = top[0];
   return <div className="screen dashboard">
     <section className={`hero ${!hasItems?'empty':''}`}>
       <div className="hero-bg"></div>
       <div className="hero-overlay"></div>
       <div className="hero-content">
-        <div className="brand"><Sparkles size={16}/> SnapValue AI</div>
+        <div className="brand"><Tag size={16}/> SnapValue AI</div>
         {!hasItems ? <div className="empty-hero"><h1>Find the money sitting at home.</h1><p>Tap Scan and take your first picture.</p></div> : <div className="value-card">
-          <p>Low Estimated Value</p>
-          <h1>{money(total)}</h1>
-          <span>{items.length} items scanned</span>
+          <div className="stat-row">
+            <div className="stat">
+              <p>Low estimated value</p>
+              <h1>{money(total)}</h1>
+              <span>{items.length} items</span>
+            </div>
+            <div className="stat-divider"></div>
+            <div className="stat">
+              <p>Top item value</p>
+              <div className="trend-row"><span className="trend-dot"><TrendingUp size={13}/></span><h1 className="stat-sm">{topItem?money(topItem.low):'—'}</h1></div>
+              <span>{topItem?topItem.name:'None yet'}</span>
+            </div>
+          </div>
         </div>}
       </div>
     </section>
     {hasItems && <>
-      <section className="sell-strip">
-        <span>Where to sell</span><div><b>eBay</b><b>Facebook</b><b>Craigslist</b><b>Mercari</b></div>
+      <section className="panel sell-panel">
+        <div className="panel-head"><h2>Where to sell</h2><button>View tips <ChevronRight size={14}/></button></div>
+        <div className="sell-grid">
+          {['eBay','Facebook','Craigslist','Mercari'].map(p=>
+            <div className="sell-card" key={p}>
+              <div className="sell-mark" style={{background:platformColors[p]}}>{platformMark(p)}</div>
+              <span>{p}</span>
+            </div>
+          )}
+        </div>
+        <p className="muted small">Compare prices across top platforms to sell faster.</p>
       </section>
       <section className="panel">
-        <div className="panel-head"><h2>Top items</h2><button onClick={openList}>View all</button></div>
+        <div className="panel-head"><h2>Top items</h2><span className="sub">Highest profit potential</span><button onClick={openList}>See all</button></div>
         {top.map(item=><ItemCard key={item.id} item={item} onClick={()=>openDetails(item)}/>) }
         {!top.length && <p className="muted">AI is still working. Estimated items will show here.</p>}
       </section>
@@ -112,8 +162,22 @@ function Dashboard({items,total,top,openList,openDetails}){
 }
 
 function ItemCard({item,onClick}){
+  const highProfit = (item.profit||0) >= 15;
   return <button className="top-card" onClick={onClick}>
-    <Thumb item={item}/><div className="grow"><b>{item.name}</b><small>{platformShort(item.platform)} · High profit</small></div><strong>{money(item.low)}</strong>
+    <Thumb item={item}/>
+    <div className="grow">
+      <b>{item.name}</b>
+      <small className="cat-line">{item.category||'Item'} · {item.condition}</small>
+      <div className="tag-row">
+        {highProfit && <span className="badge-high">High profit</span>}
+        {item.platform && <span className="plat-badge" style={{background:platformColors[item.platform]||'#888'}}>{platformMark(item.platform)}</span>}
+      </div>
+    </div>
+    <div className="price-col">
+      <strong>{money(item.low)}</strong>
+      <small>Low est.</small>
+    </div>
+    <ChevronRight size={16}/>
   </button>
 }
 function FullList({items,setSelected,setEditing}){
@@ -129,7 +193,9 @@ function FullList({items,setSelected,setEditing}){
     <label className="search"><Search size={16}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search items"/></label>
     <div className="rows">
       {filtered.map(item=><button key={item.id} className="row" onClick={()=>handleClick(item)}>
-        <Thumb item={item}/><div className="grow"><b>{item.name}</b><Status item={item}/></div><div className="row-price"><strong>{item.status==='estimated'?money(item.low):'—'}</strong><small>{platformShort(item.platform)}</small></div><ChevronRight size={16}/>
+        <Thumb item={item}/><div className="grow"><b>{item.name}</b><Status item={item}/></div>
+        {item.platform && <span className="plat-badge sm" style={{background:platformColors[item.platform]||'#888'}}>{platformMark(item.platform)}</span>}
+        <div className="row-price"><strong>{item.status==='estimated'?money(item.low):'—'}</strong></div><ChevronRight size={16}/>
       </button>)}
     </div>
   </div>
@@ -140,7 +206,22 @@ function Status({item}){
   return <small className="need">Needs More Info</small>;
 }
 function Thumb({item}){ return <div className="thumb">{item.photo ? <img src={item.photo}/> : <span>{item.name?.[0]||'?'}</span>}</div> }
-function BottomNav({page,setPage,openCamera}){ return <nav className="bottom-nav"><button className={page==='dashboard'?'active':''} onClick={()=>setPage('dashboard')}><Home size={20}/><span>Home</span></button><button className="scan" onClick={openCamera}><Camera size={28}/></button><button className={page==='list'?'active':''} onClick={()=>setPage('list')}><List size={20}/><span>List</span></button></nav> }
+function BottomNav({page,setPage,openCamera}){
+  const [open,setOpen] = useState(false);
+  const notBuilt = (label) => { setOpen(false); alert(`${label} isn't built yet — placeholder for now.`); };
+  return <nav className="bottom-nav slim">
+    <button className={page==='dashboard'?'active':''} onClick={()=>{setOpen(false); setPage('dashboard');}}><Home size={20}/><span>Home</span></button>
+    <button className="scan" onClick={()=>{setOpen(false); openCamera();}}><Camera size={26}/></button>
+    <div className="more-wrap">
+      <button className={open?'active':''} onClick={()=>setOpen(!open)}><MoreHorizontal size={20}/><span>More</span></button>
+      {open && <div className="more-menu">
+        <button onClick={()=>{setOpen(false); setPage('list');}}><List size={16}/> My Items</button>
+        <button onClick={()=>notBuilt('Stats')}><Sparkles size={16}/> Stats</button>
+        <button onClick={()=>notBuilt('Settings')}><Pencil size={16}/> Settings</button>
+      </div>}
+    </div>
+  </nav>
+}
 function Details({item,close,edit,deleteItem}){
   const listing = `${item.name}\nCondition: ${item.condition}\nPrice: ${money(item.low)}\nPlatform: ${item.platform || 'Local'}\n${item.notes||''}`;
   return <div className="sheet-back"><div className="sheet"><button className="x" onClick={close}><X/></button><Thumb item={item}/><h2>{item.name}</h2><Status item={item}/>{item.status==='needs' && <p className="alert">AI needs more info. Double tap item or press Edit to add notes/photos.</p>}<div className="price-grid"><Box label="Low" value={money(item.low)}/><Box label="Good" value={money(item.good)}/><Box label="Best" value={money(item.best)}/></div><div className="info"><p><b>Best platform:</b> {item.platform||'Unknown'}</p><p><b>Condition:</b> {item.condition}</p><p><b>Confidence:</b> {item.confidence||0}%</p><p><b>Shipping:</b> {item.ship?money(item.ship):'Needs weight'}</p><p><b>Sold comps:</b> {item.sold?.length?item.sold.map(money).join(' · '):'Still searching'}</p></div><div className="actions"><button onClick={()=>navigator.clipboard?.writeText(listing)}><Copy size={17}/> Copy Listing</button><button onClick={edit}><Pencil size={17}/> Edit</button><button className="danger" onClick={()=>deleteItem(item.id)}><Trash2 size={17}/> Delete</button></div></div></div>
